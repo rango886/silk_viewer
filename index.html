@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Silky Image Viewer</title>
+    <style>
+        /* --- 全局样式 --- */
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background-color: #121212;
+            font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+            user-select: none; 
+        }
+
+        /* --- Titlebar --- */
+        #titlebar {
+            position: fixed; top: 0; left: 0; width: 100%; height: 32px;
+            display: flex; justify-content: space-between; align-items: center;
+            background: rgba(0, 0, 0, 0.6); 
+            z-index: 2000;
+            -webkit-app-region: drag;
+            
+            /* 自动隐藏逻辑：默认隐藏 */
+            opacity: 0; 
+            pointer-events: none; /* 隐藏时不阻挡鼠标，确保底层内容或JS能捕获事件 */
+            transition: opacity 0.2s ease;
+        }
+
+        /* 显示状态 */
+        #titlebar.visible {
+            opacity: 1;
+            pointer-events: auto; /* 显示时恢复交互和拖动 */
+        }
+
+        .app-title-text {
+            color: #bbb; font-size: 12px; letter-spacing: 1px;
+            padding-left: 15px;
+            pointer-events: none;
+        }
+
+        .window-controls {
+            display: flex; height: 100%;
+            -webkit-app-region: no-drag;
+        }
+        .control-btn {
+            width: 46px; height: 100%; display: flex; justify-content: center; align-items: center;
+            color: #eee; cursor: pointer; transition: background 0.2s; font-size: 14px;
+        }
+        .control-btn:hover { background: rgba(255, 255, 255, 0.15); }
+        .close-btn:hover { background: #e81123; }
+
+        /* --- 主要视图区域 --- */
+        #viewer-container {
+            width: 100vw; height: 100vh;
+            display: flex; justify-content: center; align-items: center;
+            position: relative; overflow: hidden;
+        }
+
+        #image-stage {
+            transform-origin: 0 0; 
+            will-change: transform; 
+            transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            position: absolute; top: 0; left: 0;
+        }
+        
+        .view-img {
+            display: block; pointer-events: none;
+            box-shadow: 0 10px 50px rgba(0,0,0,0.6);
+        }
+
+        /* --- UI 控件 --- */
+        #center-btn {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            padding: 15px 40px; background: #333; color: #fff; border-radius: 8px;
+            cursor: pointer; border: 1px solid #555; -webkit-app-region: no-drag;
+            font-size: 16px; transition: all 0.2s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            z-index: 10;
+        }
+        #center-btn:hover { background: #444; border-color: #666; transform: translate(-50%, -52%); }
+
+        /* --- 拖拽遮罩层 --- */
+        #drop-zone {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px); 
+            z-index: 3000; 
+            display: flex; 
+            flex-direction: column;
+            justify-content: center; align-items: center;
+            opacity: 0; pointer-events: none; 
+            transition: opacity 0.2s ease;
+        }
+        
+        #drop-zone.active { opacity: 1; }
+
+        .drop-content {
+            text-align: center;
+            transform: scale(0.9);
+            transition: transform 0.2s;
+        }
+        #drop-zone.active .drop-content { transform: scale(1); }
+
+        .drop-icon {
+            width: 64px; height: 64px; fill: #00ffcc; margin-bottom: 20px;
+            filter: drop-shadow(0 0 15px rgba(0, 255, 204, 0.4));
+        }
+
+        .drop-text {
+            color: #fff; font-size: 24px; font-weight: 300; letter-spacing: 2px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+        
+        .drop-subtext {
+            margin-top: 10px; color: #888; font-size: 14px;
+        }
+
+        .drop-border {
+            position: absolute; top: 20px; left: 20px; right: 20px; bottom: 20px;
+            border: 2px dashed rgba(0, 255, 204, 0.3);
+            border-radius: 12px;
+            pointer-events: none;
+        }
+
+        #toast-msg {
+            position: fixed; bottom: 50px; left: 50%; 
+            transform: translateX(-50%) translateY(10px);
+            background: rgba(30, 30, 30, 0.85); color: #fff;
+            padding: 8px 24px; font-size: 14px; border-radius: 30px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            z-index: 1100; 
+            opacity: 0; transition: opacity 0.3s, transform 0.3s;
+            pointer-events: none;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+        }
+        #toast-msg.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        
+        /* --- EXIF 面板 --- */
+        #exif-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.4); z-index: 2000;
+            display: none; justify-content: center; align-items: center;
+            backdrop-filter: blur(4px);
+            animation: fadeIn 0.2s ease-out;
+        }
+        
+        .exif-card {
+            background: linear-gradient(145deg, rgba(30,30,30,0.95), rgba(20,20,20,0.98));
+            width: 380px; border-radius: 16px;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.7), 0 0 1px rgba(255,255,255,0.1);
+            padding: 0; 
+            color: #eee; font-size: 13px; position: relative;
+            border: 1px solid rgba(255,255,255,0.08);
+            overflow: hidden;
+        }
+        
+        .exif-header {
+            padding: 18px 25px;
+            background: rgba(255,255,255,0.03);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .exif-title { font-size: 16px; font-weight: 600; letter-spacing: 0.5px; color: #fff; }
+        
+        .close-exif-btn {
+            cursor: pointer; width: 24px; height: 24px; 
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 50%; background: rgba(255,255,255,0.1);
+            transition: all 0.2s; color: #ccc; font-size: 14px;
+        }
+        .close-exif-btn:hover { background: #e81123; color: #fff; }
+        
+        .exif-body { padding: 20px 25px; }
+        
+        .exif-row {
+            display: flex; justify-content: space-between; align-items: baseline;
+            padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+        .exif-row:last-child { border-bottom: none; }
+        
+        .exif-label { color: #888; font-size: 12px; }
+        .exif-value { 
+            color: #dfdfdf; font-family: "Consolas", monospace; 
+            text-align: right; max-width: 200px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .exif-path { font-size: 11px; color: #666; word-break: break-all; white-space: normal; text-align: left; margin-top: 4px;}
+
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+    </style>
+</head>
+<body>
+
+    <div id="titlebar">
+        <div class="app-title-text" id="app-title">SilkyViewer</div>
+        <div class="window-controls">
+            <div class="control-btn" onclick="ipc.send('window-min')">─</div>
+            <div class="control-btn" onclick="ipc.send('window-max')">☐</div>
+            <div class="control-btn close-btn" onclick="ipc.send('window-close')">✕</div>
+        </div>
+    </div>
+
+    <!-- 美化后的拖拽遮罩层 -->
+    <div id="drop-zone">
+        <div class="drop-border"></div>
+        <div class="drop-content">
+            <svg class="drop-icon" viewBox="0 0 24 24">
+                <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" />
+            </svg>
+            <div class="drop-text">释放以打开图片</div>
+            <div class="drop-subtext">支持 JPG, PNG, GIF, WEBP</div>
+        </div>
+    </div>
+
+    <div id="viewer-container">
+        <div id="image-stage"></div>
+        <button id="center-btn">打开图片 / 拖入图片</button>
+    </div>
+
+    <div id="toast-msg">提示信息</div>
+    
+    <div id="exif-overlay"></div>
+
+    <script>
+        // 1. 引入 webUtils 以修复 path 获取问题
+        const { ipcRenderer, shell, webUtils } = require('electron');
+        const fs = require('fs');
+        const path = require('path');
+        const ipc = ipcRenderer;
+        
+        // --- 状态 ---
+        const state = {
+            currentFile: null,
+            currentDir: null,
+            fileList: [], 
+            currentIndex: -1,
+            scale: 1, x: 0, y: 0,
+            mode: 1, 
+            isDragging: false,
+            lastMouseX: 0, lastMouseY: 0,
+            sort: { type: 'name', order: 1 } 
+        };
+
+        const els = {
+            stage: document.getElementById('image-stage'),
+            container: document.getElementById('viewer-container'),
+            toast: document.getElementById('toast-msg'),
+            openBtn: document.getElementById('center-btn'),
+            exif: document.getElementById('exif-overlay'),
+            title: document.getElementById('app-title'),
+            titlebar: document.getElementById('titlebar'),
+            dropZone: document.getElementById('drop-zone')
+        };
+
+        // --- 自动隐藏 Titlebar 逻辑 ---
+        window.addEventListener('mousemove', (e) => {
+            if (e.clientY < 50) {
+                els.titlebar.classList.add('visible');
+            } else {
+                els.titlebar.classList.remove('visible');
+            }
+        });
+
+        // --- 监听命令行打开图片 ---
+        ipc.on('open-file', (event, filePath) => {
+            loadFile(filePath);
+        });
+
+        // --- 新增：监听窗口大小改变 (Resize) ---
+        window.addEventListener('resize', () => {
+            // 只有当正在显示图片时才处理
+            if (state.currentIndex >= 0 && state.fileList.length > 0) {
+                const img = els.stage.querySelector('img');
+                if (img && img.naturalWidth) {
+                    // 1. 临时禁用动画，防止调整窗口时图片“飞”过来，保持跟手
+                    els.stage.style.transition = 'none';
+                    
+                    // 2. 重新计算适配
+                    calculateAutoFit(img.naturalWidth, img.naturalHeight);
+                    updateTransform();
+
+                    // 3. 延迟恢复动画 (防抖)
+                    clearTimeout(window.resizeTimer);
+                    window.resizeTimer = setTimeout(() => {
+                        els.stage.style.transition = ''; // 恢复 CSS 中的动画设置
+                    }, 200);
+                }
+            }
+        });
+
+        // --- 拖拽功能 ---
+        let dragCounter = 0;
+
+        document.addEventListener('dragenter', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            dragCounter++;
+            els.dropZone.classList.add('active');
+        });
+
+        document.addEventListener('dragleave', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            dragCounter--;
+            if (dragCounter <= 0) {
+                dragCounter = 0;
+                els.dropZone.classList.remove('active');
+            }
+        });
+
+        document.addEventListener('dragover', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            e.dataTransfer.dropEffect = 'copy';
+        });
+
+        document.addEventListener('drop', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            
+            dragCounter = 0;
+            els.dropZone.classList.remove('active');
+
+            console.group('--- 拖放调试日志 ---');
+            console.log('Drop Event:', e);
+            
+            const files = e.dataTransfer.files;
+            console.log('Files list:', files);
+
+            if (files && files.length > 0) {
+                const file = files[0];
+                const filePath = webUtils.getPathForFile(file);
+
+                console.log('First file object:', file);
+                console.log('Resolved filePath (via webUtils):', filePath);
+
+                if (!filePath) {
+                    console.error('Error: filePath is empty/undefined.');
+                    showToast(`错误: 无法获取文件路径 (可能是网络图片或受限)`);
+                    console.groupEnd();
+                    return;
+                }
+
+                try {
+                    console.log(`Checking fs.statSync('${filePath}')`);
+                    const stat = fs.statSync(filePath);
+                    
+                    if (stat.isDirectory()) {
+                        console.warn('Dropped item is a directory.');
+                        showToast("不支持文件夹，请拖入图片");
+                    } else {
+                        console.log('File is valid. Loading...');
+                        loadFile(filePath);
+                    }
+                } catch (err) {
+                    console.error("Drop Error:", err);
+                    showToast("读取文件失败: " + err.message);
+                }
+            } else {
+                console.warn('No files found.');
+                showToast("未检测到文件");
+            }
+            console.groupEnd();
+        });
+
+        els.openBtn.addEventListener('click', async () => {
+            const paths = await ipc.invoke('open-file-dialog');
+            if (paths && paths.length > 0) loadFile(paths[0]);
+        });
+        
+        els.exif.addEventListener('click', (e) => {
+            if(e.target === els.exif) els.exif.style.display = 'none';
+        });
+
+        // --- 核心逻辑 ---
+
+        function showToast(text) {
+            els.toast.innerText = text;
+            els.toast.classList.add('show');
+            clearTimeout(window.toastTimer);
+            window.toastTimer = setTimeout(() => els.toast.classList.remove('show'), 2000);
+        }
+
+        function loadFile(filePath) {
+            try {
+                const dir = path.dirname(filePath);
+                const filename = path.basename(filePath);
+                const ext = path.extname(filePath).toLowerCase();
+                const validExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+
+                if (!validExts.includes(ext)) { showToast("不支持的文件格式"); return; }
+
+                if (dir !== state.currentDir) {
+                    state.currentDir = dir;
+                    refreshFileList();
+                }
+                
+                const index = state.fileList.findIndex(f => f.name === filename);
+                state.currentIndex = (index !== -1) ? index : 0; 
+                
+                if (index === -1 && state.fileList.length > 0) {
+                   const retryIndex = state.fileList.findIndex(f => f.name === filename);
+                   if (retryIndex !== -1) state.currentIndex = retryIndex;
+                }
+
+                render();
+                els.openBtn.style.display = 'none';
+            } catch (err) {
+                console.error("loadFile Error:", err);
+                showToast("加载出错：" + err.message);
+            }
+        }
+
+        function refreshFileList() {
+            try {
+                const files = fs.readdirSync(state.currentDir);
+                const validExts = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+                state.fileList = files.filter(f => validExts.includes(path.extname(f).toLowerCase())).map(f => {
+                    const fullPath = path.join(state.currentDir, f);
+                    const stat = fs.statSync(fullPath);
+                    return { name: f, path: fullPath, time: stat.mtimeMs, size: stat.size, birth: stat.birthtime };
+                });
+                sortFiles(false);
+            } catch (e) { console.error('Read dir error', e); }
+        }
+
+        function sortFiles(showTip = true) {
+            const { type, order } = state.sort;
+            state.fileList.sort((a, b) => {
+                if (type === 'name') return a.name.localeCompare(b.name, 'zh-CN', {numeric: true}) * order;
+                if (type === 'time') return (a.time - b.time) * order;
+                if (type === 'size') return (a.size - b.size) * order;
+            });
+            if (state.currentFile) state.currentIndex = state.fileList.findIndex(f => f.path === state.currentFile);
+            if (showTip) {
+                const typeMap = { 'name': '名称', 'time': '时间', 'size': '大小' };
+                showToast(`排序：按${typeMap[type]} ${order > 0 ? '正序' : '倒序'}`);
+            }
+        }
+
+        // --- 渲染 ---
+
+        function render() {
+            if (state.currentIndex < 0 || state.fileList.length === 0) return;
+            const file = state.fileList[state.currentIndex];
+            state.currentFile = file.path;
+            
+            // --- 修改：标题格式 文件名在前，进度在后 ---
+            els.title.innerText = `${file.name} - ${state.currentIndex + 1}/${state.fileList.length}`;
+
+            const newImg = new Image();
+            newImg.src = file.path;
+            newImg.className = 'view-img';
+            newImg.draggable = false;
+            
+            newImg.onload = () => {
+                calculateAutoFit(newImg.naturalWidth, newImg.naturalHeight);
+                
+                els.stage.style.transition = 'none'; 
+                els.stage.innerHTML = '';
+                els.stage.appendChild(newImg);
+                updateTransform();
+                void els.stage.offsetHeight; 
+                els.stage.style.transition = ''; 
+            };
+            newImg.onerror = () => showToast("图片加载失败");
+        }
+
+        function calculateAutoFit(imgW, imgH) {
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+            
+            // 新顺序：1 自动 2 焦点 3 中心 4 宽度 5 高度
+
+            // 2. 焦点锁定 (原4)
+            if (state.mode === 2 && state.scale !== 1) return; 
+            
+            // 3. 中心锁定 (原5)
+            if (state.mode === 3 && state.scale !== 1) {
+                state.x = (winW - imgW * state.scale) / 2;
+                state.y = (winH - imgH * state.scale) / 2;
+                return;
+            }
+
+            let newScale = 1;
+            
+            // 1. 自动缩放 (原1)
+            if (state.mode === 1) {
+                if (imgW / imgH > winW / winH) newScale = winW / imgW; 
+                else newScale = winH / imgH; 
+            } 
+            // 4. 宽度优先 (原2)
+            else if (state.mode === 4) {
+                newScale = winW / imgW;
+            } 
+            // 5. 高度优先 (原3)
+            else if (state.mode === 5) {
+                newScale = winH / imgH;
+            }
+
+            state.scale = newScale;
+            state.x = (winW - imgW * newScale) / 2;
+            state.y = (winH - imgH * newScale) / 2;
+        }
+
+        function updateTransform() {
+            els.stage.style.transform = `translate3d(${state.x}px, ${state.y}px, 0) scale(${state.scale})`;
+        }
+
+        // --- 交互 ---
+        window.addEventListener('wheel', (e) => {
+            if (e.ctrlKey) {
+                const zoomFactor = 0.1;
+                const direction = e.deltaY > 0 ? -1 : 1;
+                const newScale = state.scale * (1 + direction * zoomFactor);
+                if (newScale < 0.05) return; 
+                
+                els.stage.style.transition = 'none';
+
+                const rect = els.container.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+                const imgX = (mouseX - state.x) / state.scale;
+                const imgY = (mouseY - state.y) / state.scale;
+
+                state.scale = newScale;
+                state.x = mouseX - imgX * state.scale;
+                state.y = mouseY - imgY * state.scale;
+                updateTransform();
+                
+                clearTimeout(window.zoomTransitionTimer);
+                window.zoomTransitionTimer = setTimeout(() => {
+                    els.stage.style.transition = '';
+                }, 100);
+            } else {
+                if (Date.now() - (window.lastWheelTime || 0) > 60) {
+                    if (e.deltaY > 0) navigate(1);
+                    else navigate(-1);
+                    window.lastWheelTime = Date.now();
+                }
+            }
+        });
+
+        els.container.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return; 
+            state.isDragging = true;
+            state.lastMouseX = e.clientX;
+            state.lastMouseY = e.clientY;
+            els.container.style.cursor = 'grabbing';
+            els.stage.style.transition = 'none';
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!state.isDragging) return;
+            const dx = e.clientX - state.lastMouseX;
+            const dy = e.clientY - state.lastMouseY;
+            state.x += dx;
+            state.y += dy;
+            state.lastMouseX = e.clientX;
+            state.lastMouseY = e.clientY;
+            requestAnimationFrame(updateTransform);
+        });
+
+        window.addEventListener('mouseup', () => {
+            state.isDragging = false;
+            els.container.style.cursor = 'default';
+            els.stage.style.transition = ''; 
+        });
+
+        function navigate(dir) {
+            if (state.fileList.length === 0) return;
+            let nextIndex = state.currentIndex + dir;
+            if (nextIndex >= state.fileList.length) nextIndex = 0;
+            if (nextIndex < 0) nextIndex = state.fileList.length - 1;
+            state.currentIndex = nextIndex;
+            render();
+        }
+
+        function setMode(m) {
+            state.mode = m;
+            // 新顺序：1 自动 2 焦点 3 中心 4 宽度 5 高度
+            const modeNames = ['自动缩放', '焦点锁定', '中心锁定', '宽度优先', '高度优先'];
+            if (m < 1 || m > 5) return;
+            showToast(`模式切换：${modeNames[m-1]}`);
+            if (state.fileList[state.currentIndex]) {
+                const img = els.stage.querySelector('img');
+                if (img) {
+                    els.stage.style.transition = ''; 
+                    calculateAutoFit(img.naturalWidth, img.naturalHeight);
+                    updateTransform();
+                } else render();
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.altKey || e.ctrlKey || e.metaKey) return; 
+            switch(e.key) {
+                case 'ArrowRight': navigate(1); break;
+                case 'ArrowLeft': navigate(-1); break;
+                case 'Home': state.currentIndex = 0; render(); showToast("已到第一张"); break;
+                case 'End': state.currentIndex = state.fileList.length - 1; render(); showToast("已到最后一张"); break;
+                case '1': setMode(1); break;
+                case '2': setMode(2); break;
+                case '3': setMode(3); break;
+                case '4': setMode(4); break;
+                case '5': setMode(5); break;
+                
+                // 修复：调用主进程调整窗口大小
+                case '+': 
+                case '=':
+                    ipc.send('window-resize-inc'); 
+                    showToast("放大窗口"); 
+                    break;
+                case '-': 
+                case '_':
+                    ipc.send('window-resize-dec'); 
+                    showToast("缩小窗口"); 
+                    break;
+                    
+                case 'l': if (state.currentFile) shell.showItemInFolder(state.currentFile); break;
+                case 'n': state.sort.type = 'name'; state.sort.order = 1; sortFiles(); break;
+                case 'N': state.sort.type = 'name'; state.sort.order = -1; sortFiles(); break;
+                case 't': state.sort.type = 'time'; state.sort.order = 1; sortFiles(); break;
+                case 'T': state.sort.type = 'time'; state.sort.order = -1; sortFiles(); break;
+                case 's': state.sort.type = 'size'; state.sort.order = 1; sortFiles(); break;
+                case 'S': state.sort.type = 'size'; state.sort.order = -1; sortFiles(); break;
+                case 'i': 
+                    if (state.currentFile) {
+                        const f = state.fileList[state.currentIndex];
+                        const stat = fs.statSync(f.path);
+                        
+                        const html = `
+                            <div class="exif-card" onclick="event.stopPropagation()">
+                                <div class="exif-header">
+                                    <div class="exif-title">图片详情</div>
+                                    <div class="close-exif-btn" onclick="document.getElementById('exif-overlay').style.display='none'">✕</div>
+                                </div>
+                                <div class="exif-body">
+                                    <div class="exif-row"><span class="exif-label">文件名</span><span class="exif-value" title="${f.name}">${f.name}</span></div>
+                                    <div class="exif-row"><span class="exif-label">尺寸</span><span class="exif-value">${(stat.size / 1024).toFixed(2)} KB</span></div>
+                                    <div class="exif-row"><span class="exif-label">缩放比例</span><span class="exif-value">${(state.scale * 100).toFixed(0)}%</span></div>
+                                    <div class="exif-row"><span class="exif-label">创建时间</span><span class="exif-value">${new Date(stat.birthtime).toLocaleDateString()}</span></div>
+                                    <div class="exif-row"><span class="exif-label">修改时间</span><span class="exif-value">${new Date(stat.mtime).toLocaleDateString()}</span></div>
+                                    <div style="margin-top:10px;">
+                                        <span class="exif-label">完整路径</span>
+                                        <div class="exif-path">${f.path}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        els.exif.innerHTML = html;
+                        els.exif.style.display = 'flex';
+                    }
+                    break;
+                case 'F11': ipc.send('window-fullscreen'); break;
+                case 'Escape':
+                    if (els.exif.style.display === 'flex') els.exif.style.display = 'none';
+                    else ipc.send('window-close');
+                    break;
+            }
+        });
+    </script>
+</body>
+</html>

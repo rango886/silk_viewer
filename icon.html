@@ -1,0 +1,51 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <title>Silky Viewer Icon</title>
+    <defs>
+        <!-- 背景渐变：深灰到纯黑，符合软件的主题 -->
+        <linearGradient id="bg_grad" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#3a3a3a"/>
+            <stop offset="1" stop-color="#121212"/>
+        </linearGradient>
+        
+        <!-- 丝滑线条渐变：青色到深蓝，体现丝滑感和科技感 -->
+        <linearGradient id="silk_grad" x1="96" y1="320" x2="416" y2="190" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#00ffcc"/>
+            <stop offset="1" stop-color="#0077ff"/>
+        </linearGradient>
+
+        <!-- 柔光滤镜 -->
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+            <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+
+    <!-- 外框容器 -->
+    <rect x="32" y="32" width="448" height="448" rx="110" fill="url(#bg_grad)" stroke="#444" stroke-width="2"/>
+
+    <!-- 内部边框暗示 (类似取景框) -->
+    <rect x="90" y="90" width="332" height="332" rx="60" stroke="#ffffff" stroke-opacity="0.05" stroke-width="4"/>
+
+    <!-- 核心图形：丝滑的 S 型波浪 (抽象的山脉/图片) -->
+    <path d="M96 330 C 160 330, 190 220, 256 240 C 322 260, 350 190, 416 190" 
+          stroke="url(#silk_grad)" 
+          stroke-width="28" 
+          stroke-linecap="round" 
+          stroke-linejoin="round"
+          filter="url(#glow)"
+          opacity="0.95"/>
+          
+    <!-- 倒影/流动感装饰线条 (增加动感) -->
+    <path d="M120 360 C 170 360, 190 280, 240 290" 
+          stroke="#00ffcc" 
+          stroke-width="8" 
+          stroke-linecap="round" 
+          stroke-opacity="0.3"/>
+
+    <!-- 焦点/太阳元素 -->
+    <circle cx="360" cy="130" r="20" fill="#00ffcc" fill-opacity="1" filter="url(#glow)"/>
+
+</svg>

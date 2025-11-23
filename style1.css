@@ -1,0 +1,153 @@
+重置与基础样式
+* { box-sizing: border-box; user-select: none; }
+body, html {
+  margin: 0; padding: 0;
+  width: 100%; height: 100%;
+  background-color: rgba(37, 37, 37, 1); /* 对应 Flutter 的背景色 */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow: hidden; /* 禁止原生滚动 */
+  color: #fff;
+}
+
+/* 容器 */
+#app {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* 图片查看区域 */
+#viewport {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: grab;
+}
+#viewport:active { cursor: grabbing; }
+
+#target-image {
+  /* 关键：使用 transform 进行硬件加速的缩放和移动 */
+  transform-origin: 0 0; /* 变换原点设为左上角，通过 JS 计算偏移 */
+  will-change: transform;
+  max-width: none; /* 防止 CSS 限制图片尺寸 */
+  display: block;
+  pointer-events: none; /* 鼠标事件由 viewport 接管 */
+}
+
+/* 初始状态/加载/错误提示 */
+#overlay-message {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(37, 37, 37, 0.8);
+  z-index: 10;
+  transition: opacity 0.3s;
+}
+#overlay-message.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.btn {
+  margin-top: 20px;
+  padding: 10px 20px;
+  background: #2196F3;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn:hover { background: #1976D2; }
+
+/* 拖拽覆盖层 */
+#drag-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(33, 150, 243, 0.3);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  font-size: 40px;
+  color: rgba(255,255,255,0.8);
+  border: 4px dashed rgba(255,255,255,0.5);
+}
+
+/* 悬浮标题栏 (TitleBar) */
+#title-bar {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 38px;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  z-index: 100;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  -webkit-app-region: drag; /* 允许拖动窗口 */
+}
+#title-bar:hover { opacity: 1; }
+
+.app-title {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-right: 12px;
+}
+.file-name {
+  flex: 1;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+.window-controls {
+  display: flex;
+  gap: 4px;
+  -webkit-app-region: no-drag; /* 按钮区域不可拖动窗口 */
+}
+.control-btn {
+  width: 32px; height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.control-btn:hover { background: rgba(255,255,255,0.1); }
+
+/* Toast 提示 */
+#toast {
+  position: absolute;
+  bottom: 20px; right: 20px;
+  background: rgba(0, 0, 0, 0.75);
+  color: white;
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-line;
+  z-index: 200;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+#toast.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
